@@ -74,6 +74,7 @@
   // Set default date to today
   document.getElementById('date').valueAsDate = new Date();
 
+  // Fetch makes and models from Google Sheet
   async function fetchMakesAndModels() {
     try {
       const response = await fetch(sheetURL);
@@ -94,6 +95,7 @@
 
   fetchMakesAndModels();
 
+  // Trigger search when the button is clicked
   document.getElementById('manualSearchBtn').addEventListener('click', function () {
     const vin = document.getElementById('vin').value;
     if (vin) {
@@ -103,6 +105,7 @@
     }
   });
 
+  // Fetch make/model from external API
   async function searchVIN(vin) {
     const apiUrl = `https://api.vindecoder.p.rapidapi.com/decode?vin=${vin}`;
     const options = {
@@ -135,6 +138,7 @@
     }
   }
 
+  // Start scanner for QR code (VIN barcode)
   function startScanner() {
     const qrReader = document.getElementById('qr-reader');
     qrReader.classList.remove('hidden');
@@ -153,6 +157,7 @@
     }).catch(err => console.error('Unable to start scanner', err));
   }
 
+  // Submit form data to Google Sheet
   const form = document.getElementById('automotiveForm');
   form.addEventListener('submit', e => {
     e.preventDefault();
@@ -163,6 +168,7 @@
       formData.set('Model', formData.get('ManualModel'));
     }
 
+    // Send form data to Google Apps Script
     fetch(sheetURL, {
       method: 'POST',
       body: formData
