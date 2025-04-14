@@ -4,65 +4,79 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Auto Light Clinic Submission</title>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
-      background: #f7f7f7;
       padding: 20px;
-      margin: 0;
+      background: #f7f7f7;
     }
     h1 {
       text-align: center;
-      color: #333;
+      margin-bottom: 20px;
     }
     form {
-      background: #fff;
+      background: white;
       padding: 20px;
       border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
       max-width: 400px;
-      margin: 0 auto;
+      margin: auto;
     }
     label {
       display: block;
+      margin-bottom: 5px;
       margin-top: 15px;
-      color: #555;
     }
     input, select, button {
       width: 100%;
       padding: 8px;
       margin-top: 5px;
-      border: 1px solid #ddd;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
       border-radius: 4px;
     }
     button {
       background-color: #007BFF;
       color: white;
       border: none;
-      cursor: pointer;
       margin-top: 15px;
+      cursor: pointer;
     }
-    button:disabled {
-      background-color: #cccccc;
+    button:hover {
+      background-color: #0056b3;
     }
-    #scanner {
+    #reader {
       width: 100%;
       margin-top: 15px;
+    }
+    .hidden {
+      display: none;
+    }
+    .popup {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #4BB543;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 4px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      z-index: 1000;
     }
   </style>
 </head>
 <body>
   <h1>Auto Light Clinic Submission</h1>
-  <form id="autoLightForm">
+  <form id="autoForm">
     <label for="vin">VIN</label>
-    <input type="text" id="vin" name="VIN" placeholder="Scan or enter VIN manually" required>
+    <input type="text" id="vin" name="VIN" required />
 
-    <button type="button" id="enableScanner">Enable Scanner</button>
+    <button type="button" onclick="searchVIN()">Search VIN</button>
+    <button type="button" onclick="toggleScanner()">Enable Scanner</button>
 
-    <!-- Scanner container moved below Enable Scanner button -->
-    <div id="scanner"></div>
-
-    <button type="button" id="searchVin">Search VIN</button>
+    <div id="reader" class="hidden"></div>
 
     <label for="make">Make</label>
     <select id="make" name="Make" required>
@@ -75,13 +89,13 @@
     </select>
 
     <label for="zip">ZIP Code</label>
-    <input type="text" id="zip" name="ZIP" placeholder="Enter ZIP Code" required>
+    <input type="text" id="zip" name="ZIP" pattern="\\d{5}" required />
 
     <label for="headlights">How many headlights?</label>
-    <input type="number" id="headlights" name="Headlights" placeholder="0" min="0">
+    <input type="number" id="headlights" name="Headlights" min="0" value="0" />
 
-    <label for="otherBulbs">How many other bulbs?</label>
-    <input type="number" id="otherBulbs" name="OtherBulbs" placeholder="0" min="0">
+    <label for="otherbulbs">How many other bulbs?</label>
+    <input type="number" id="otherbulbs" name="OtherBulbs" min="0" value="0" />
 
     <label for="polished">Were the headlights polished?</label>
     <select id="polished" name="Polished">
@@ -92,40 +106,36 @@
     <button type="submit">Submit</button>
   </form>
 
-  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <div id="popup" class="popup hidden">Form submitted successfully!</div>
+
   <script>
-    const form = document.getElementById('autoLightForm');
+    const form = document.getElementById('autoForm');
+    const vinInput = document.getElementById('vin');
     const makeSelect = document.getElementById('make');
     const modelSelect = document.getElementById('model');
-    const vinInput = document.getElementById('vin');
-    const enableScannerBtn = document.getElementById('enableScanner');
-    const searchVinBtn = document.getElementById('searchVin');
+    const popup = document.getElementById('popup');
+
+    const scriptURL = 'https://script.google.com/macros/s/AKfycbywW77s3BXRcNeSMEVIP-Qzz9m9RMwVkNaeYvnJvuKOOnV4enmOHaQGxQnOlVZzS08ZGQ/exec';
+    const makesModelsURL = 'https://script.google.com/macros/s/AKfycbyADfBBBkqBz9lNiWMaIpPbH8CJbDC9SiXG85mP1u_R9C9kqw5Fb81tiJvghwGMi6qW/exec';
+
     let scanner;
 
-    const scriptURL = 'https://script.google.com/macros/s/AKfycbyADfBBBkqBz9lNiWMaIpPbH8CJbDC9SiXG85mP1u_R9C9kqw5Fb81tiJvghwGMi6qW/exec';
-
-    async function fetchMakesAndModels() {
+    async function populateMakesAndModels() {
       try {
-        const response = await fetch(scriptURL + '?action=getMakesAndModels');
+        const response = await fetch(makesModelsURL + '?action=getMakesAndModels');
         const data = await response.json();
 
         makeSelect.innerHTML = '<option value="">Select Make</option>';
-        Object.keys(data).forEach(make => {
-          const option = document.createElement('option');
-          option.value = make;
-          option.textContent = make;
-          makeSelect.appendChild(option);
+        Object.keys(data).sort().forEach(make => {
+          makeSelect.innerHTML += `<option value="${make}">${make}</option>`;
         });
 
         makeSelect.addEventListener('change', () => {
           const selectedMake = makeSelect.value;
           modelSelect.innerHTML = '<option value="">Select Model</option>';
           if (data[selectedMake]) {
-            data[selectedMake].forEach(model => {
-              const option = document.createElement('option');
-              option.value = model;
-              option.textContent = model;
-              modelSelect.appendChild(option);
+            data[selectedMake].sort().forEach(model => {
+              modelSelect.innerHTML += `<option value="${model}">${model}</option>`;
             });
           }
         });
@@ -134,90 +144,98 @@
       }
     }
 
-    fetchMakesAndModels();
-
-    async function fetchVehicleData(vin) {
-      try {
-        searchVinBtn.disabled = true;
-        searchVinBtn.textContent = 'Searching...';
-        const response = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/${vin}?format=json`);
-        const data = await response.json();
-        const result = data.Results[0];
-        makeSelect.value = result.Make || '';
-        makeSelect.dispatchEvent(new Event('change'));
-        setTimeout(() => {
-          modelSelect.value = result.Model || '';
-        }, 300);
-      } catch (error) {
-        console.error('Error fetching vehicle data:', error);
-      } finally {
-        searchVinBtn.disabled = false;
-        searchVinBtn.textContent = 'Search VIN';
-      }
-    }
-
-    searchVinBtn.addEventListener('click', () => {
-      const vin = vinInput.value.trim();
-      if (vin) {
-        fetchVehicleData(vin);
-      }
-    });
-
-    enableScannerBtn.addEventListener('click', () => {
-      if (scanner) {
-        scanner.stop().then(() => scanner.clear());
-        scanner = null;
-        enableScannerBtn.textContent = 'Enable Scanner';
-        return;
-      }
-
-      scanner = new Html5Qrcode("scanner");
-
-      scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: 250, supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA] },
-        (decodedText, decodedResult) => {
-          if (decodedResult.result.format.formatName !== 'QR_CODE') {
-            vinInput.value = decodedText;
-            fetchVehicleData(decodedText);
-            scanner.stop().then(() => {
-              scanner.clear();
-              scanner = null;
-              enableScannerBtn.textContent = 'Enable Scanner';
-            });
-          }
-        },
-        (errorMessage) => {
-          // console.warn(`Scanner error: ${errorMessage}`);
-        }
-      ).then(() => {
-        enableScannerBtn.textContent = 'Disable Scanner';
-      }).catch(err => {
-        console.error('Unable to start scanner:', err);
-      });
-    });
+    populateMakesAndModels();
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
 
       const formData = new FormData(form);
-      const params = new URLSearchParams();
-      for (const pair of formData.entries()) {
-        params.append(pair[0], pair[1]);
-      }
-
       try {
-        await fetch(scriptURL, { method: 'POST', body: params });
-        alert('Thank you! Your entry has been recorded.');
+        await fetch(scriptURL, { method: 'POST', body: formData });
+        showPopup();
         form.reset();
-        makeSelect.innerHTML = '<option value="">Select Make</option>';
         modelSelect.innerHTML = '<option value="">Select Model</option>';
-        fetchMakesAndModels();
       } catch (error) {
-        console.error('Error submitting form:', error);
-        alert('There was an error submitting the form. Please try again.');
+        console.error('Form submission error:', error);
       }
     });
+
+    function showPopup() {
+      popup.classList.remove('hidden');
+      setTimeout(() => {
+        popup.classList.add('hidden');
+      }, 2000);
+    }
+
+    function searchVIN() {
+      const vin = vinInput.value.trim();
+      if (!vin) {
+        alert('Please enter a VIN.');
+        return;
+      }
+
+      fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVin/${vin}?format=json`)
+        .then(response => response.json())
+        .then(data => {
+          const results = data.Results;
+          const make = results.find(item => item.Variable === 'Make')?.Value || '';
+          const model = results.find(item => item.Variable === 'Model')?.Value || '';
+
+          if (make) makeSelect.value = make;
+          if (model) {
+            const event = new Event('change');
+            makeSelect.dispatchEvent(event);
+            setTimeout(() => {
+              modelSelect.value = model;
+            }, 500);
+          }
+        })
+        .catch(error => console.error('VIN search error:', error));
+    }
+
+    function toggleScanner() {
+      const reader = document.getElementById('reader');
+      if (reader.classList.contains('hidden')) {
+        reader.classList.remove('hidden');
+        if (!scanner) {
+          scanner = new Html5Qrcode("reader");
+        }
+        scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: 250,
+            formatsToSupport: [
+              Html5QrcodeSupportedFormats.CODE_128,
+              Html5QrcodeSupportedFormats.CODE_39,
+              Html5QrcodeSupportedFormats.CODE_93,
+              Html5QrcodeSupportedFormats.EAN_13,
+              Html5QrcodeSupportedFormats.EAN_8,
+              Html5QrcodeSupportedFormats.UPC_A,
+              Html5QrcodeSupportedFormats.UPC_E,
+              Html5QrcodeSupportedFormats.ITF,
+              Html5QrcodeSupportedFormats.AZTEC,
+              Html5QrcodeSupportedFormats.DATA_MATRIX,
+              Html5QrcodeSupportedFormats.MAXICODE,
+              Html5QrcodeSupportedFormats.PDF_417
+            ],
+            rememberLastUsedCamera: true
+          },
+          (decodedText) => {
+            vinInput.value = decodedText;
+            searchVIN();
+            scanner.stop();
+            reader.classList.add('hidden');
+          },
+          (errorMessage) => {
+            // ignore read errors
+          }
+        );
+      } else {
+        scanner.stop();
+        reader.classList.add('hidden');
+      }
+    }
   </script>
 </body>
 </html>
