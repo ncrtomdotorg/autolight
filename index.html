@@ -7,197 +7,227 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      background: #f4f4f9;
       margin: 0;
       padding: 20px;
-      color: #333;
+      background: #f4f4f9;
     }
     h2 {
       text-align: center;
-      color: #444;
     }
     form {
-      max-width: 400px;
-      margin: auto;
       background: white;
       padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      border-radius: 10px;
+      max-width: 500px;
+      margin: auto;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     label {
-      margin-top: 12px;
       display: block;
-      font-weight: bold;
+      margin-top: 15px;
     }
     input, select, button {
       width: 100%;
-      padding: 8px;
-      margin-top: 4px;
-      border-radius: 6px;
+      padding: 10px;
+      margin-top: 5px;
+      border-radius: 5px;
       border: 1px solid #ccc;
       box-sizing: border-box;
     }
     button {
-      background-color: #007BFF;
+      background-color: #007bff;
       color: white;
       border: none;
       cursor: pointer;
-      margin-top: 16px;
+      margin-top: 15px;
     }
     button:hover {
       background-color: #0056b3;
     }
-    #loading {
+    .loading {
       text-align: center;
-      color: #007BFF;
       margin-top: 10px;
     }
-    .scanner-toggle {
-      margin-top: 16px;
-      text-align: center;
-    }
-    video {
+    #scanner {
       width: 100%;
       margin-top: 10px;
-      border-radius: 8px;
+    }
+    .hidden {
+      display: none;
     }
   </style>
 </head>
 <body>
+
   <h2>Auto Light Clinic Submission</h2>
-  <form id="autoLightForm">
+  <form id="autoForm">
     <label for="vin">VIN:</label>
-    <input type="text" id="vin" name="vin" placeholder="Scan or enter VIN" required>
+    <input type="text" id="vin" name="vin" placeholder="Scan or enter VIN manually" />
+
+    <button type="button" onclick="decodeVIN()">Search VIN</button>
+    <button type="button" onclick="enableScanner()">Enable Scanner</button>
+
+    <div id="scanner" class="hidden"></div>
 
     <label for="make">Make:</label>
-    <input type="text" id="make" name="make" placeholder="Auto-filled or enter manually" required>
+    <select id="make" name="make">
+      <option value="">Select Make</option>
+    </select>
 
     <label for="model">Model:</label>
-    <input type="text" id="model" name="model" placeholder="Auto-filled or enter manually" required>
+    <select id="model" name="model">
+      <option value="">Select Model</option>
+    </select>
+
+    <label for="manualModel">Manual Model Entry (Optional):</label>
+    <input type="text" id="manualModel" name="manualModel" placeholder="Enter model manually if not listed" />
 
     <label for="zip">ZIP Code:</label>
-    <input type="text" id="zip" name="zip" required>
+    <input type="text" id="zip" name="zip" required />
 
     <label for="headlights">How many headlights?</label>
-    <input type="number" id="headlights" name="headlights" min="0" value="0">
+    <input type="number" id="headlights" name="headlights" min="0" value="0" />
 
-    <label for="bulbs">How many other bulbs?</label>
-    <input type="number" id="bulbs" name="bulbs" min="0" value="0">
+    <label for="otherBulbs">How many other bulbs?</label>
+    <input type="number" id="otherBulbs" name="otherBulbs" min="0" value="0" />
 
     <label for="polished">Were the headlights polished?</label>
     <select id="polished" name="polished">
-      <option value="No" selected>No</option>
+      <option value="No">No</option>
       <option value="Yes">Yes</option>
     </select>
 
-    <button type="submit">Submit</button>
-    <div id="loading"></div>
-  </form>
+    <div class="loading" id="loadingMessage" style="display: none;">Loading...</div>
 
-  <div class="scanner-toggle">
-    <button id="toggleScanner">Enable VIN Scanner</button>
-    <video id="preview" hidden></video>
-  </div>
+    <button type="submit">Submit</button>
+  </form>
 
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <script>
-    const form = document.getElementById('autoLightForm');
+    const form = document.getElementById('autoForm');
     const vinInput = document.getElementById('vin');
-    const makeInput = document.getElementById('make');
-    const modelInput = document.getElementById('model');
-    const loading = document.getElementById('loading');
-    const toggleScannerButton = document.getElementById('toggleScanner');
-    const video = document.getElementById('preview');
+    const makeSelect = document.getElementById('make');
+    const modelSelect = document.getElementById('model');
+    const manualModel = document.getElementById('manualModel');
+    const loadingMessage = document.getElementById('loadingMessage');
+    const scannerContainer = document.getElementById('scanner');
 
-    let scannerEnabled = false;
-    let codeReader;
+    let scanner;
+    let scanning = false;
 
-    async function fetchVehicleData(vin) {
-      loading.textContent = 'Decoding VIN...';
+    async function fetchMakeModel() {
       try {
-        const response = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvaluesextended/${vin}?format=json`);
+        const response = await fetch('https://script.google.com/macros/s/AKfycbyADfBBBkqBz9lNiWMaIpPbH8CJbDC9SiXG85mP1u_R9C9kqw5Fb81tiJvghwGMi6qW/exec');
         const data = await response.json();
-        const result = data.Results[0];
-        makeInput.value = result.Make || '';
-        modelInput.value = result.Model || '';
+
+        makeSelect.innerHTML = '<option value="">Select Make</option>';
+        data.make.forEach(make => {
+          const option = document.createElement('option');
+          option.value = make;
+          option.textContent = make;
+          makeSelect.appendChild(option);
+        });
+
+        modelSelect.innerHTML = '<option value="">Select Model</option>';
+        data.model.forEach(model => {
+          const option = document.createElement('option');
+          option.value = model;
+          option.textContent = model;
+          modelSelect.appendChild(option);
+        });
       } catch (error) {
-        console.error('Error fetching VIN data:', error);
+        console.error('Error fetching make and model:', error);
+      }
+    }
+
+    async function decodeVIN() {
+      const vin = vinInput.value.trim();
+      if (!vin) {
+        alert('Please enter a VIN.');
+        return;
+      }
+
+      loadingMessage.style.display = 'block';
+      try {
+        const response = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVin/${vin}?format=json`);
+        const data = await response.json();
+        const results = data.Results;
+
+        const make = results.find(item => item.Variable === 'Make')?.Value || '';
+        const model = results.find(item => item.Variable === 'Model')?.Value || '';
+
+        if (make) makeSelect.value = make;
+        if (model) modelSelect.value = model;
+
+      } catch (error) {
+        console.error('Error decoding VIN:', error);
       } finally {
-        loading.textContent = '';
+        loadingMessage.style.display = 'none';
+      }
+    }
+
+    function enableScanner() {
+      if (scanning) return;
+
+      scanning = true;
+      scannerContainer.classList.remove('hidden');
+
+      scanner = new ZXing.BrowserBarcodeReader();
+      scanner.decodeFromVideoDevice(undefined, scannerContainer, (result, err) => {
+        if (result) {
+          vinInput.value = result.text;
+          decodeVIN();
+          disableScanner();
+        }
+      });
+    }
+
+    function disableScanner() {
+      if (scanner) {
+        scanner.reset();
+        scannerContainer.classList.add('hidden');
+        scanning = false;
       }
     }
 
     form.addEventListener('submit', async function(e) {
       e.preventDefault();
-      loading.textContent = 'Submitting...';
+      loadingMessage.style.display = 'block';
 
       const formData = new FormData(form);
+      const manualModelValue = manualModel.value.trim();
+      const selectedModel = manualModelValue || formData.get('model');
 
-      // Ensure optional fields have default values
-      if (!formData.get('headlights')) formData.set('headlights', '0');
-      if (!formData.get('bulbs')) formData.set('bulbs', '0');
-      if (!formData.get('polished')) formData.set('polished', 'No');
+      const payload = {
+        date: new Date().toLocaleString(),
+        vin: formData.get('vin'),
+        make: formData.get('make'),
+        model: selectedModel,
+        zip: formData.get('zip'),
+        headlights: formData.get('headlights') || '0',
+        otherBulbs: formData.get('otherBulbs') || '0',
+        polished: formData.get('polished') || 'No'
+      };
 
       try {
         await fetch('https://script.google.com/macros/s/AKfycbywW77s3BXRcNeSMEVIP-Qzz9m9RMwVkNaeYvnJvuKOOnV4enmOHaQGxQnOlVZzS08ZGQ/exec', {
           method: 'POST',
-          body: formData
+          body: JSON.stringify(payload),
+          headers: { 'Content-Type': 'application/json' }
         });
-
-        loading.textContent = 'Thank you! Your entry has been recorded.';
+        alert('Thank you! Your entry has been recorded.');
         form.reset();
-        // Reset defaults
-        document.getElementById('headlights').value = 0;
-        document.getElementById('bulbs').value = 0;
-        document.getElementById('polished').value = 'No';
+        disableScanner();
       } catch (error) {
-        console.error('Error!', error.message);
-        loading.textContent = 'Submission failed. Please try again.';
+        console.error('Error submitting form:', error);
+        alert('There was an error submitting the form.');
       } finally {
-        setTimeout(() => loading.textContent = '', 2000);
+        loadingMessage.style.display = 'none';
       }
     });
 
-    toggleScannerButton.addEventListener('click', async () => {
-      if (!scannerEnabled) {
-        codeReader = new ZXing.BrowserBarcodeReader();
-        try {
-          const videoInputDevices = await codeReader.listVideoInputDevices();
-          if (videoInputDevices.length > 0) {
-            scannerEnabled = true;
-            toggleScannerButton.textContent = 'Disable VIN Scanner';
-            video.hidden = false;
-
-            codeReader.decodeFromVideoDevice(videoInputDevices[0].deviceId, 'preview', (result, err) => {
-              if (result) {
-                vinInput.value = result.text;
-                fetchVehicleData(result.text);
-                stopScanner();
-              }
-              if (err && !(err instanceof ZXing.NotFoundException)) {
-                console.error(err);
-              }
-            });
-          } else {
-            alert('No video input devices found');
-          }
-        } catch (err) {
-          console.error(err);
-          alert('Error accessing camera');
-        }
-      } else {
-        stopScanner();
-      }
-    });
-
-    function stopScanner() {
-      if (codeReader) {
-        codeReader.reset();
-        video.hidden = true;
-        scannerEnabled = false;
-        toggleScannerButton.textContent = 'Enable VIN Scanner';
-      }
-    }
+    // Initial load
+    fetchMakeModel();
   </script>
 </body>
 </html>
