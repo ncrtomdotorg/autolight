@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Automotive Selector Form</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f9; padding: 20px; }
+    form { background: #fff; padding: 20px; border-radius: 10px; max-width: 500px; margin: auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    label { display: block; margin-top: 15px; }
+    input, select { width: 100%; padding: 8px; margin-top: 5px; border-radius: 5px; border: 1px solid #ccc; }
+    button { margin-top: 20px; padding: 10px; width: 100%; background: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 16px; }
+    #successMessage { display: none; text-align: center; margin-top: 20px; color: green; }
+    .loader { display: none; text-align: center; margin-top: 20px; }
+  </style>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+</head>
+<body>
+
+<form id="automotiveForm">
+  <h2>Automotive Selector</h2>
+
+  <label for="date">Date</label>
+  <input type="date" id="date" name="Date" required>
+
+  <label for="vin">VIN</label>
+  <input type="text" id="vin" name="vin" placeholder="Scan or enter VIN" />
+  <button type="button" onclick="startScanner()">Scan VIN</button>
+  <div id="qr-reader" style="display:none; width:100%;"></div>
+
+  <label for="make">Make</label>
+  <select id="make" name="Make" required>
+    <option value="">Loading makes...</option>
+  </select>
+
+  <label for="model">Model</label>
+  <select id="model" name="Model" required>
+    <option value="">Please select a make first</option>
+  </select>
+
+  <label for="manualModel">Manual Model Entry (if not listed)</label>
+  <input type="text" id="manualModel" name="ManualModel" placeholder="Type model if not listed">
+
+  <label for="zip">ZIP Code</label>
+  <input type="text" id="zip" name="ZIP" required>
+
+  <label for="scanner">Scanner Used</label>
+  <input type="text" id="scanner" name="Scanner" placeholder="Scanner name">
+
+  <label for="headlights">How many headlights?</label>
+  <input type="number" id="headlights" name="Headlights" value="0" min="0">
+
+  <label for="otherBulbs">How many other bulbs?</label>
+  <input type="number" id="otherBulbs" name="OtherBulbs" value="0" min="0">
+
+  <label for="polished">Were the headlights polished?</label>
+  <select id="polished" name="Polished">
+    <option value="No" selected>No</option>
+    <option value="Yes">Yes</option>
+  </select>
+
+  <button type="submit">Submit</button>
+</form>
+
+<div class="loader" id="loader">Submitting...</div>
+<div id="successMessage">Thank you! Your entry has been recorded. 🎉</div>
+
+<script>
+  const sheetURL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR-Jz3xuUyr_IYCYPlXr0VIQFQj3-6T0hE-hhojpHelc_9FDZWIXy8JtPdyb_gIG-FiWbgWlHMuLGx-/pub?output=csv';
+  const googleScriptURL = 'https://script.google.com/macros/s/AKfycbywW77s3BXRcNeSMEVIP-Qzz9m9RMwVkNaeYvnJvuKOOnV4enmOHaQGxQnOlVZzS08ZGQ/exec';
+
+  async function fetchMakesAndModels() {
+    const response = await fetch(sheetURL);
+    const data = await response.text();
+    const rows = data.split('\n').map(row => row.split(','));
+
+    const makeSelect = document.getElementById('make');
+    const modelSelect = document.getElementById('model');
+
+    const makeModelMap = {};
+
+    rows.forEach(([make, model]) => {
+      const cleanMake = make.trim();
+      const cleanModel = model.trim();
+
+      if (!makeModelMap[cleanMake]) {
+        makeModelMap[cleanMake] = [];
+      }
+      if (cleanModel && !makeModelMap[cleanMake].includes(cleanModel)) {
+        makeModelMap[cleanMake].push(cleanModel);
+      }
+    });
+
+    const makes = Object.keys(makeModelMap).sort();
+    makeSelect.innerHTML = '<option value="">Select Make</option>';
+    makes.forEach(make => {
+      const option = document.createElement('option');
+      option.value = make;
+      option.textContent = make;
+      makeSelect.appendChild(option);
+    });
+
+    makeSelect.addEventListener('change', () => {
+      const selectedMake = makeSelect.value;
+      const models = makeModelMap[selectedMake] || [];
+      modelSelect.innerHTML = '<option value="">Select Model</option>';
+      models.sort().forEach(model => {
+        const option = document.createElement('option');
+        option.value = model;
+        option.textContent = model;
+        modelSelect.appendChild(option);
+      });
+    });
+  }
+
+  fetchMakesAndModels();
+
+  function startScanner() {
+    const qrReader = document.getElementById('qr-reader');
+    qrReader.style.display = 'block';
+
+    const html5QrCode = new Html5Qrcode("qr-reader");
+    const qrConfig = { fps: 10, qrbox: { width: 250, height: 100 }, formatsToSupport: [Html5QrcodeScanType.CODE_39] };
+
+    html5QrCode.start(
+      { facingMode: "environment" },
+      qrConfig,
+      (decodedText) => {
+        document.getElementById('vin').value = decodedText;
+        html5QrCode.stop().then(() => {
+          qrReader.style.display = 'none';
+        }).catch(err => console.error('Failed to stop scanner', err));
+      },
+      (errorMessage) => {
+        console.warn(`Barcode no match: ${errorMessage}`);
+      }
+    ).catch(err => console.error('Unable to start scanner', err));
+  }
+
+  // Automatically select make and model if VIN is manually entered
+  document.getElementById('vin').addEventListener('input', async function () {
+    const vin = this.value.trim();
+    if (vin.length >= 17) {
+      // Call VIN decoder API (NHTSA VIN decoder example)
+      const response = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${vin}?format=json`);
+      const data = await response.json();
+
+      if (data.Results && data.Results[0]) {
+        const make = data.Results[0].Make;
+        const model = data.Results[0].Model;
+
+        const makeSelect = document.getElementById('make');
+        const modelSelect = document.getElementById('model');
+        
+        // Set make and model
+        makeSelect.value = make;
+        const event = new Event('change');
+        makeSelect.dispatchEvent(event); // Trigger model update
+        modelSelect.value = model;
+      } else {
+        alert("Unable to decode VIN or no data available.");
+      }
+    }
+  });
+
+  // Set today's date as the default
+  document.getElementById('date').valueAsDate = new Date();
+
+  const form = document.getElementById('automotiveForm');
+  const loader = document.getElementById('loader');
+  const successMessage = document.getElementById('successMessage');
+
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    loader.style.display = 'block';
+
+    const formData = new FormData(form);
+    if (!formData.get('Model') && formData.get('ManualModel')) {
+      formData.set('Model', formData.get('ManualModel'));
+    }
+
+    fetch(googleScriptURL, {
+      method: 'POST',
+      body: formData
+    })
+    .then(response => {
+      loader.style.display = 'none';
+      successMessage.style.display = 'block';
+      form.reset();
+      setTimeout(() => {
+        successMessage.style.display = 'none';
+      }, 3000);
+    })
+    .catch(error => {
+      loader.style.display = 'none';
+      alert('Error! Please try again.');
+      console.error(error);
+    });
+  });
+</script>
+
+</body>
+</html>
