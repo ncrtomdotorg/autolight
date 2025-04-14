@@ -7,20 +7,20 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      margin: 20px;
-      background: #f9f9f9;
-      color: #333;
+      padding: 20px;
+      background: #f4f4f9;
     }
-    h2 {
+    h1 {
       text-align: center;
+      margin-bottom: 20px;
     }
     form {
       max-width: 400px;
       margin: auto;
       background: white;
       padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
     label {
       display: block;
@@ -30,208 +30,202 @@
       width: 100%;
       padding: 10px;
       margin-top: 5px;
-      border-radius: 8px;
+      border-radius: 4px;
       border: 1px solid #ccc;
     }
-    #scanner {
-      width: 100%;
+    button {
       margin-top: 15px;
+      background-color: #007BFF;
+      color: white;
+      border: none;
+    }
+    button:disabled {
+      background-color: #ccc;
+    }
+    #loader {
+      text-align: center;
+      margin-top: 10px;
       display: none;
-    }
-    .toggle-button {
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      margin-top: 10px;
-    }
-    .search-btn {
-      background-color: #2196F3;
-      color: white;
-      border: none;
-      margin-top: 10px;
-    }
-    .success {
-      color: green;
-      text-align: center;
-    }
-    .error {
-      color: red;
-      text-align: center;
     }
   </style>
 </head>
 <body>
 
-<h2>Auto Light Clinic Submission</h2>
-<form id="autoForm">
-  <label for="date">Date:</label>
-  <input type="date" id="date" name="date" required>
+<h1>Auto Light Clinic Submission</h1>
 
-  <label for="vin">VIN:</label>
-  <input type="text" id="vin" name="vin" placeholder="Scan or enter VIN" required>
-  <button type="button" class="search-btn" onclick="manualVinSearch()">Search VIN</button>
+<form id="lightForm">
+  <label for="vin">VIN</label>
+  <input type="text" id="vin" name="VIN" placeholder="Scan or enter VIN manually" required>
 
-  <button type="button" class="toggle-button" onclick="toggleScanner()">Enable/Disable Scanner</button>
-  <div id="scanner"></div>
+  <button type="button" id="enableScanner">Enable Scanner</button>
+  <button type="button" id="manualSearch">Search</button>
 
-  <label for="make">Make:</label>
-  <select id="make" name="make" required>
+  <label for="make">Make</label>
+  <select id="make" name="Make" required>
     <option value="">Select Make</option>
   </select>
 
-  <label for="model">Model:</label>
-  <select id="model" name="model" required>
+  <label for="model">Model</label>
+  <select id="model" name="Model" required>
     <option value="">Select Model</option>
   </select>
 
-  <label for="zip">ZIP Code:</label>
-  <input type="text" id="zip" name="zip" placeholder="Enter ZIP code" required>
+  <label for="zip">ZIP Code</label>
+  <input type="text" id="zip" name="ZIP" required>
 
   <label for="headlights">How many headlights?</label>
-  <input type="number" id="headlights" name="headlights" value="0" min="0" required>
+  <input type="number" id="headlights" name="Headlights" min="0" value="0">
 
   <label for="otherBulbs">How many other bulbs?</label>
-  <input type="number" id="otherBulbs" name="otherBulbs" value="0" min="0" required>
+  <input type="number" id="otherBulbs" name="OtherBulbs" min="0" value="0">
 
   <label for="polished">Were the headlights polished?</label>
-  <select id="polished" name="polished">
-    <option value="No">No</option>
+  <select id="polished" name="Polished">
+    <option value="No" selected>No</option>
     <option value="Yes">Yes</option>
   </select>
 
-  <button type="submit">Submit</button>
-  <div id="message"></div>
+  <div id="loader">Loading...</div>
+
+  <button type="submit" id="submitButton">Submit</button>
 </form>
 
-<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script>
-  const scriptURL = 'https://script.google.com/macros/s/AKfycbywW77s3BXRcNeSMEVIP-Qzz9m9RMwVkNaeYvnJvuKOOnV4enmOHaQGxQnOlVZzS08ZGQ/exec';
-  const form = document.getElementById('autoForm');
-  const scannerContainer = document.getElementById('scanner');
+  const form = document.getElementById('lightForm');
+  const loader = document.getElementById('loader');
+  const submitButton = document.getElementById('submitButton');
+  const makeSelect = document.getElementById('make');
+  const modelSelect = document.getElementById('model');
   const vinInput = document.getElementById('vin');
-  let scannerActive = false;
-  let makesAndModels = {};  // This will store all makes and models
 
-  // Set today's date by default
-  document.getElementById('date').valueAsDate = new Date();
+  let scanner;
+  let makesAndModels = {};
+  const sheetURL = 'https://script.google.com/macros/s/AKfycbxpbSvY3i8pbsKb_P2mWa9y6S5e8y6EiZhNJSXwNr4ZmYl_bh8CEuFZc5DJUlupGaku/exec';
 
-  // Fetch makes and models from Google Apps Script
   async function fetchMakesAndModels() {
     try {
-      const response = await fetch('https://script.google.com/macros/s/AKfycbxpbSvY3i8pbsKb_P2mWa9y6S5e8y6EiZhNJSXwNr4ZmYl_bh8CEuFZc5DJUlupGaku/exec');
+      const response = await fetch(sheetURL + '?action=getMakesAndModels');
       const data = await response.json();
-      makesAndModels = data;  // Save the data to use later
-
-      // Populate Make select dropdown
-      const makeSelect = document.getElementById('make');
-      for (const make in makesAndModels) {
-        const option = document.createElement('option');
-        option.value = make;
-        option.textContent = make;
-        makeSelect.appendChild(option);
-      }
-
+      makesAndModels = data;
+      populateMakes();
     } catch (error) {
-      console.error('Error fetching makes and models:', error);
+      alert('Error fetching makes and models.');
     }
   }
 
-  // Auto populate Models based on selected Make
-  document.getElementById('make').addEventListener('change', function() {
-    const modelSelect = document.getElementById('model');
-    modelSelect.innerHTML = '<option value="">Select Model</option>';
+  function populateMakes() {
+    makeSelect.innerHTML = '<option value="">Select Make</option>';
+    Object.keys(makesAndModels).sort().forEach(make => {
+      const option = document.createElement('option');
+      option.value = make;
+      option.text = make;
+      makeSelect.add(option);
+    });
+  }
 
-    const selectedMake = this.value;
-    if (selectedMake && makesAndModels[selectedMake]) {
-      makesAndModels[selectedMake].forEach(model => {
+  function populateModels(selectedMake) {
+    modelSelect.innerHTML = '<option value="">Select Model</option>';
+    if (makesAndModels[selectedMake]) {
+      makesAndModels[selectedMake].sort().forEach(model => {
         const option = document.createElement('option');
         option.value = model;
-        option.textContent = model;
-        modelSelect.appendChild(option);
+        option.text = model;
+        modelSelect.add(option);
       });
+    }
+  }
+
+  makeSelect.addEventListener('change', () => {
+    populateModels(makeSelect.value);
+  });
+
+  async function decodeVIN(vin) {
+    if (!vin) return;
+    loader.style.display = 'block';
+    try {
+      const response = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/${vin}?format=json`);
+      const data = await response.json();
+      const result = data.Results[0];
+      makeSelect.value = result.Make || '';
+      populateModels(result.Make);
+      modelSelect.value = result.Model || '';
+    } catch (error) {
+      console.error(error);
+      alert('Failed to decode VIN.');
+    } finally {
+      loader.style.display = 'none';
+    }
+  }
+
+  document.getElementById('manualSearch').addEventListener('click', () => {
+    const vin = vinInput.value.trim();
+    if (vin) {
+      decodeVIN(vin);
     }
   });
 
-  // Manual VIN search
-  async function manualVinSearch() {
-    const vin = vinInput.value.trim();
-    if (!vin) return alert('Please enter a VIN first.');
-    try {
-      const response = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVin/${vin}?format=json`);
-      const data = await response.json();
-      const make = data.Results.find(item => item.Variable === 'Make')?.Value;
-      const model = data.Results.find(item => item.Variable === 'Model')?.Value;
+  document.getElementById('enableScanner').addEventListener('click', () => {
+    if (scanner) {
+      scanner.stop();
+      scanner = null;
+      return;
+    }
+    const html5QrCode = new Html5Qrcode("reader");
+    scanner = html5QrCode;
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: 250 },
+      (decodedText) => {
+        vinInput.value = decodedText;
+        decodeVIN(decodedText);
+        html5QrCode.stop();
+        scanner = null;
+      },
+      (errorMessage) => { /* ignore scan errors */ }
+    ).catch(err => {
+      console.error(err);
+      alert('Camera access denied or not supported.');
+    });
+  });
 
-      if (make && model) {
-        document.getElementById('make').value = make;
-        document.getElementById('make').dispatchEvent(new Event('change'));
-        setTimeout(() => {
-          document.getElementById('model').value = model;
-        }, 100); // Wait for models to populate
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    submitButton.disabled = true;
+    loader.style.display = 'block';
+
+    const formData = new FormData(form);
+    const params = new URLSearchParams(formData).toString();
+
+    try {
+      const response = await fetch(sheetURL, {
+        method: 'POST',
+        body: params,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      });
+      const text = await response.text();
+      if (text === 'Success') {
+        alert('Thank you! Your entry has been recorded.');
+        form.reset();
+        modelSelect.innerHTML = '<option value="">Select Model</option>';
       } else {
-        alert('Could not decode VIN. Please check the VIN and try again.');
+        alert('There was an error. Please try again.');
       }
     } catch (error) {
       console.error(error);
-      alert('Error decoding VIN.');
+      alert('Submission failed.');
+    } finally {
+      loader.style.display = 'none';
+      submitButton.disabled = false;
     }
-  }
-
-  // Start or stop scanner
-  async function startScanner() {
-    html5QrCode = new Html5Qrcode("scanner");
-    const config = { fps: 10, qrbox: 250, formatsToSupport: [Html5QrcodeSupportedFormats.CODE_39] };
-    try {
-      await html5QrCode.start({ facingMode: "environment" }, config, async (decodedText) => {
-        vinInput.value = decodedText;
-        manualVinSearch();
-        stopScanner();
-      });
-    } catch (err) {
-      console.error('Error starting scanner:', err);
-      alert('Error starting scanner: ' + err.message);
-    }
-  }
-
-  function stopScanner() {
-    if (html5QrCode) {
-      html5QrCode.stop().then(() => {
-        scannerContainer.style.display = 'none';
-        scannerActive = false;
-      }).catch(err => console.error('Stop scanner error', err));
-    }
-  }
-
-  function toggleScanner() {
-    if (scannerActive) {
-      stopScanner();
-    } else {
-      scannerContainer.style.display = 'block';
-      startScanner();
-      scannerActive = true;
-    }
-  }
-
-  // Handle form submission
-  form.addEventListener('submit', e => {
-    e.preventDefault();
-    const formData = new FormData(form);
-    fetch(scriptURL, { method: 'POST', body: formData })
-      .then(() => {
-        document.getElementById('message').innerHTML = '<p class="success">Thank you! Your entry has been recorded.</p>';
-        form.reset();
-        document.getElementById('date').valueAsDate = new Date();
-      })
-      .catch(error => {
-        console.error('Error!', error.message);
-        document.getElementById('message').innerHTML = '<p class="error">Error! Please try again.</p>';
-      });
   });
 
-  // Load makes and models when page loads
+  // Initialize
   fetchMakesAndModels();
-
 </script>
+
+<!-- Camera placeholder -->
+<div id="reader" style="width: 300px; margin: 20px auto;"></div>
 
 </body>
 </html>
