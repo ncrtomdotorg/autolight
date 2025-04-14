@@ -12,10 +12,8 @@
     button { margin-top: 20px; padding: 10px; width: 100%; background: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 16px; }
     #successMessage { display: none; text-align: center; margin-top: 20px; color: green; }
     .loader { display: none; text-align: center; margin-top: 20px; }
-    #qr-reader { width: 100%; height: 300px; }
-    .hidden { display: none; }
   </style>
-  <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js" type="text/javascript"></script>
 </head>
 <body>
 
@@ -23,15 +21,12 @@
   <h2>Automotive Selector</h2>
 
   <label for="date">Date</label>
-  <input type="date" id="date" name="Date" required>
+  <input type="date" id="date" name="Date" value="" required>
 
   <label for="vin">VIN</label>
-  <input type="text" id="vin" name="vin" placeholder="Enter VIN manually or scan" />
-
-  <button type="button" id="manualSearchBtn">Search for Make/Model</button>
-  <button type="button" id="scanBtn" onclick="startScanner()">Scan VIN</button>
-
-  <div id="qr-reader" class="hidden"></div>
+  <input type="text" id="vin" name="vin" placeholder="Scan or enter VIN" />
+  <button type="button" onclick="startScanner()">Scan VIN</button>
+  <div id="qr-reader" style="display:none; width:100%;"></div>
 
   <label for="make">Make</label>
   <select id="make" name="Make" required>
@@ -40,7 +35,7 @@
 
   <label for="model">Model</label>
   <select id="model" name="Model" required>
-    <option value="">Please select a make first</option>
+    <option value="">Select Model</option>
   </select>
 
   <label for="manualModel">Manual Model Entry (if not listed)</label>
@@ -50,10 +45,10 @@
   <input type="text" id="zip" name="ZIP" required>
 
   <label for="headlights">How many headlights?</label>
-  <input type="number" id="headlights" name="Headlights" value="0" min="0" />
+  <input type="number" id="headlights" name="Headlights" value="0" min="0">
 
   <label for="otherBulbs">How many other bulbs?</label>
-  <input type="number" id="otherBulbs" name="OtherBulbs" value="0" min="0" />
+  <input type="number" id="otherBulbs" name="OtherBulbs" value="0" min="0">
 
   <label for="polished">Were the headlights polished?</label>
   <select id="polished" name="Polished">
@@ -68,121 +63,103 @@
 <div id="successMessage">Thank you! Your entry has been recorded. 🎉</div>
 
 <script>
-  const sheetURL = 'https://script.google.com/macros/s/AKfycbyADfBBBkqBz9lNiWMaIpPbH8CJbDC9SiXG85mP1u_R9C9kqw5Fb81tiJvghwGMi6qW/exec';
-  let makesAndModels = {};
+  const sheetURL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR-Jz3xuUyr_IYCYPlXr0VIQFQj3-6T0hE-hhojpHelc_9FDZWIXy8JtPdyb_gIG-FiWbgWlHMuLGx-/pub?output=csv';
 
-  // Set default date to today
-  document.getElementById('date').valueAsDate = new Date();
-
-  // Fetch makes and models from Google Sheet
   async function fetchMakesAndModels() {
-    try {
-      const response = await fetch(sheetURL);
-      const data = await response.json();
-      makesAndModels = data;
+    const response = await fetch(sheetURL);
+    const data = await response.text();
+    const rows = data.split('\n').map(row => row.split(','));
 
-      const makeSelect = document.getElementById('make');
-      Object.keys(makesAndModels).sort().forEach(make => {
+    const makeSelect = document.getElementById('make');
+    const modelSelect = document.getElementById('model');
+
+    const makeModelMap = {};
+
+    rows.forEach(([make, model]) => {
+      const cleanMake = make.trim();
+      const cleanModel = model.trim();
+
+      if (!makeModelMap[cleanMake]) {
+        makeModelMap[cleanMake] = [];
+      }
+      if (cleanModel && !makeModelMap[cleanMake].includes(cleanModel)) {
+        makeModelMap[cleanMake].push(cleanModel);
+      }
+    });
+
+    const makes = Object.keys(makeModelMap).sort();
+    makeSelect.innerHTML = '<option value="">Select Make</option>';
+    makes.forEach(make => {
+      const option = document.createElement('option');
+      option.value = make;
+      option.textContent = make;
+      makeSelect.appendChild(option);
+    });
+
+    makeSelect.addEventListener('change', () => {
+      const selectedMake = makeSelect.value;
+      const models = makeModelMap[selectedMake] || [];
+      modelSelect.innerHTML = '<option value="">Select Model</option>';
+      models.sort().forEach(model => {
         const option = document.createElement('option');
-        option.value = make;
-        option.textContent = make;
-        makeSelect.appendChild(option);
+        option.value = model;
+        option.textContent = model;
+        modelSelect.appendChild(option);
       });
-    } catch (error) {
-      console.error('Error fetching makes and models:', error);
-    }
+    });
   }
 
   fetchMakesAndModels();
 
-  // Trigger search when the button is clicked
-  document.getElementById('manualSearchBtn').addEventListener('click', function () {
-    const vin = document.getElementById('vin').value;
-    if (vin) {
-      searchVIN(vin);
-    } else {
-      alert("Please enter a VIN first.");
-    }
-  });
-
-  // Fetch make/model from external API
-  async function searchVIN(vin) {
-    const apiUrl = `https://api.vindecoder.p.rapidapi.com/decode?vin=${vin}`;
-    const options = {
-      method: 'GET',
-      headers: {
-        'X-RapidAPI-Host': 'vindecoder.p.rapidapi.com',
-        'X-RapidAPI-Key': 'your-rapidapi-key'
-      }
-    };
-
-    try {
-      const response = await fetch(apiUrl, options);
-      const data = await response.json();
-      
-      const make = data.Make;
-      const model = data.Model;
-
-      if (make && model) {
-        const makeSelect = document.getElementById('make');
-        const modelSelect = document.getElementById('model');
-        
-        makeSelect.value = make;
-        modelSelect.value = model;
-      } else {
-        alert('No make/model found for this VIN');
-      }
-    } catch (error) {
-      console.error('Error decoding VIN:', error);
-      alert('Error decoding VIN');
-    }
-  }
-
-  // Start scanner for QR code (VIN barcode)
   function startScanner() {
     const qrReader = document.getElementById('qr-reader');
-    qrReader.classList.remove('hidden');
+    qrReader.style.display = 'block';
 
     const html5QrCode = new Html5Qrcode("qr-reader");
     const qrConfig = { fps: 10, qrbox: { width: 250, height: 100 } };
 
-    html5QrCode.start({ facingMode: "environment" }, qrConfig, (decodedText) => {
-      document.getElementById('vin').value = decodedText;
-      searchVIN(decodedText); // Automatically search for VIN after scanning
-      html5QrCode.stop().then(() => {
-        qrReader.classList.add('hidden');
-      }).catch(err => console.error('Failed to stop scanner', err));
-    }, (errorMessage) => {
-      console.warn(`QR Code no match: ${errorMessage}`);
-    }).catch(err => console.error('Unable to start scanner', err));
+    html5QrCode.start(
+      { facingMode: "environment" },
+      qrConfig,
+      (decodedText) => {
+        document.getElementById('vin').value = decodedText;
+        html5QrCode.stop().then(() => {
+          qrReader.style.display = 'none';
+        }).catch(err => console.error('Failed to stop scanner', err));
+      },
+      (errorMessage) => {
+        console.warn(`QR Code no match: ${errorMessage}`);
+      }
+    ).catch(err => console.error('Unable to start scanner', err));
   }
 
-  // Submit form data to Google Sheet
   const form = document.getElementById('automotiveForm');
+  const loader = document.getElementById('loader');
+  const successMessage = document.getElementById('successMessage');
+
   form.addEventListener('submit', e => {
     e.preventDefault();
-    document.getElementById('loader').style.display = 'block';
-    
+    loader.style.display = 'block';
+
     const formData = new FormData(form);
     if (!formData.get('Model') && formData.get('ManualModel')) {
       formData.set('Model', formData.get('ManualModel'));
     }
 
-    // Send form data to Google Apps Script
-    fetch(sheetURL, {
+    fetch('YOUR_GOOGLE_SCRIPT_WEB_APP_URL', {
       method: 'POST',
       body: formData
     })
     .then(response => {
-      document.getElementById('loader').style.display = 'none';
-      document.getElementById('successMessage').style.display = 'block';
+      loader.style.display = 'none';
+      successMessage.style.display = 'block';
       form.reset();
       setTimeout(() => {
-        document.getElementById('successMessage').style.display = 'none';
+        successMessage.style.display = 'none';
       }, 3000);
     })
     .catch(error => {
-      document.getElementById('loader').style.display = 'none';
+      loader.style.display = 'none';
       alert('Error! Please try again.');
       console.error(error);
     });
